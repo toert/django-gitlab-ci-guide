@@ -1,0 +1,41 @@
+image: docker:stable
+services:
+  - docker:dind
+
+stages:
+  - build
+  - test
+  - deploy
+
+variables:
+  DOCKER_HOST: tcp://docker:2375
+  DOCKER_DRIVER: overlay2
+
+before_script:
+  - apk add --update py-pip &&
+      pip install docker-compose
+  - docker login -u gitlab-ci-token -p $CI_JOB_TOKEN registry.gitlab.com
+
+build:
+  stage: build
+  script:
+    - docker build -t registry.gitlab.com/your_username/your_project_name .
+    - docker push registry.gitlab.com/your_username/your_project_name
+  only:
+    - master
+
+deploy:
+  stage: deploy
+  before_script:
+  - apk add --no-cache openssh-client bash
+  - mkdir -p ~/.ssh
+  - echo "$DEPLOY_KEY" | tr -d '\r' > ~/.ssh/id_rsa
+  - cat ~/.ssh/id_rsa
+  - chmod 700 ~/.ssh/id_rsa
+  - eval "$(ssh-agent -s)"
+  - ssh-add ~/.ssh/id_rsa
+  - ssh-keyscan -H 'gitlab.com' >> ~/.ssh/known_hosts
+  script:
+    - bash devops/deploy.sh
+  only:
+    - master
